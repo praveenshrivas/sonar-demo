@@ -1,449 +1,118 @@
-
-import sqlite3
-import os
-import random
-import json
-import logging
-import hashlib
-import datetime
-import re
-import math
-
-# Application Configuration
-APP_NAME = "Student Management System"
-APP_VERSION = "1.0"
-DATABASE_NAME = "students.db"
-
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "admin123"
-SECRET_KEY = "my_super_secret_key_12345"
-API_TOKEN = "123456789abcdef"
-
-logging.basicConfig(level=logging.INFO)
+                    f"Student {student_id} was not found."
+                )
 
 
-# Database Connection
-def connect_database():
-    try:
-        connection = sqlite3.connect(":memory:")
-        cursor = connection.cursor()
-        return connection, cursor
-    except Exception as error:
-        print("Database connection failed:", error)
-        return None, None
+def student_from_row(row: sqlite3.Row) -> Student:
+    """Convert a SQLite row into a Student value object."""
+    return Student(
+        student_id=int(row["student_id"]),
+        name=str(row["name"]),
+        email=str(row["email"]),
+        course=str(row["course"]),
+        marks=float(row["marks"]),
+    )
 
 
-# Create Database Tables
-def create_tables(cursor):
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS students (
-            id INTEGER PRIMARY KEY,
-            name TEXT,
-            email TEXT,
-            age INTEGER,
-            course TEXT,
-            marks INTEGER
-        )
-    """)
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS teachers (
-            id INTEGER PRIMARY KEY,
-            name TEXT,
-            email TEXT,
-            subject TEXT
-        )
-    """)
+def validate_student_details(
+    name: str, email: str, course: str, marks: float
+) -> None:
+    """Validate the fields required to create a student."""
+    if not name.strip():
+        raise StudentValidationError("Student name cannot be empty.")
+    if not course.strip():
+        raise StudentValidationError("Course name cannot be empty.")
+    if not is_valid_email(email):
+        raise StudentValidationError("Enter a valid email address.")
+    validate_marks(marks)
 
 
-# Student Management
-class StudentManager:
-
-    def __init__(self):
-        self.connection, self.cursor = connect_database()
-        self.students = []
-        self.total_students = 0
-        self.password = "student123"
-        self.admin_access = True
-
-    def add_student(self, name, email, age, course, marks):
-        try:
-            query = f"""
-                INSERT INTO students
-                (name, email, age, course, marks)
-                VALUES ('{name}', '{email}', {age}, '{course}', {marks})
-            """
-            self.cursor.execute(query)
-            self.connection.commit()
-
-            student = {
-                "name": name,
-                "email": email,
-                "age": age,
-                "course": course,
-                "marks": marks
-            }
-
-            self.students.append(student)
-            self.total_students += 1
-
-            print("Student added successfully")
-
-        except Exception as e:
-            print("Something went wrong", e)
-
-    def get_student(self, student_id):
-        try:
-            query = f"SELECT * FROM students WHERE id = {student_id}"
-            self.cursor.execute(query)
-            result = self.cursor.fetchone()
-            return result
-        except:
-            print("Unable to fetch student")
-            return None
-
-    def update_student(self, student_id, name, email):
-        try:
-            query = f"""
-                UPDATE students
-                SET name = '{name}', email = '{email}'
-                WHERE id = {student_id}
-            """
-            self.cursor.execute(query)
-            self.connection.commit()
-            print("Student updated")
-        except Exception:
-            print("Update failed")
-
-    def delete_student(self, student_id):
-        try:
-            query = f"DELETE FROM students WHERE id = {student_id}"
-            self.cursor.execute(query)
-            self.connection.commit()
-            print("Student deleted")
-        except Exception as error:
-            print(error)
-
-    def search_student(self, search_text):
-        results = []
-
-        for student in self.students:
-            if search_text.lower() in student["name"].lower():
-                results.append(student)
-
-        return results
-
-    def display_students(self):
-        for student in self.students:
-            print("Name:", student["name"])
-            print("Email:", student["email"])
-            print("Course:", student["course"])
-            print("Marks:", student["marks"])
-            print("--------------------")
-
-    def calculate_average_marks(self):
-        total = 0
-        count = 0
-
-        for student in self.students:
-            total += student["marks"]
-            count += 1
-
-        if count == 0:
-            return 0
-
-        return total / count
-
-    def calculate_total_marks(self):
-        total = 0
-        for student in self.students:
-            total = total + student["marks"]
-        return total
-
-    def get_topper(self):
-        topper = None
-        highest_marks = 0
-
-        for student in self.students:
-            if student["marks"] > highest_marks:
-                highest_marks = student["marks"]
-                topper = student
-
-        return topper
-
-    def find_students_by_course(self, course):
-        result = []
-
-        for student in self.students:
-            if student["course"] == course:
-                result.append(student)
-
-        return result
-
-    def find_students_by_age(self, age):
-        result = []
-
-        for student in self.students:
-            if student["age"] == age:
-                result.append(student)
-
-        return result
+def validate_marks(marks: float) -> None:
+    """Ensure marks are a number between zero and one hundred."""
+    if not isinstance(marks, (int, float)) or isinstance(marks, bool):
+        raise StudentValidationError("Marks must be a number.")
+    if not 0 <= marks <= 100:
+        raise StudentValidationError("Marks must be between 0 and 100.")
 
 
-# Teacher Management
-class TeacherManager:
-
-    def __init__(self):
-        self.teachers = []
-        self.admin_password = "teacher123"
-
-    def add_teacher(self, name, email, subject):
-        teacher = {
-            "name": name,
-            "email": email,
-            "subject": subject
-        }
-
-        self.teachers.append(teacher)
-        print("Teacher added successfully")
-
-    def display_teachers(self):
-        for teacher in self.teachers:
-            print("Teacher:", teacher["name"])
-            print("Email:", teacher["email"])
-            print("Subject:", teacher["subject"])
-
-    def search_teacher(self, name):
-        for teacher in self.teachers:
-            if teacher["name"] == name:
-                return teacher
-        return None
-
-    def delete_teacher(self, name):
-        for teacher in self.teachers:
-            if teacher["name"] == name:
-                self.teachers.remove(teacher)
-                return True
+def is_valid_email(email: str) -> bool:
+    """Perform a basic email format check suitable for this demo."""
+    value = email.strip()
+    if value.count("@") != 1:
         return False
+    local_part, domain = value.split("@")
+    return bool(local_part and "." in domain and not domain.startswith("."))
 
 
-# Authentication
-class Authentication:
-
-    def __init__(self):
-        self.username = "admin"
-        self.password = "admin123"
-        self.logged_in = False
-
-    def login(self, username, password):
-        if username == self.username:
-            if password == self.password:
-                self.logged_in = True
-                print("Login successful")
-                return True
-            else:
-                print("Incorrect password")
-                return False
-        else:
-            print("User not found")
-            return False
-
-    def logout(self):
-        self.logged_in = False
-        print("Logged out")
-
-    def generate_password_hash(self, password):
-        return hashlib.md5(password.encode()).hexdigest()
-
-    def check_password(self, password):
-        if password == self.password:
-            return True
-        return False
+def calculate_grade(marks: float) -> str:
+    """Convert a mark percentage into a letter grade."""
+    validate_marks(marks)
+    grade_boundaries: Sequence[tuple[float, str]] = (
+        (90, "A"),
+        (80, "B"),
+        (70, "C"),
+        (60, "D"),
+        (0, "F"),
+    )
+    for minimum_mark, grade in grade_boundaries:
+        if marks >= minimum_mark:
+            return grade
+    return "F"
 
 
-# Utility Functions
-def calculate_grade(marks):
-    if marks >= 90:
-        return "A+"
-    elif marks >= 80:
-        return "A"
-    elif marks >= 70:
-        return "B"
-    elif marks >= 60:
-        return "C"
-    elif marks >= 50:
-        return "D"
-    else:
-        return "F"
+def print_student_report(students: Sequence[Student]) -> None:
+    """Print a readable report for a collection of students."""
+    if not students:
+        print("No students have been registered yet.")
+        return
 
-
-def validate_email(email):
-    if "@" in email:
-        if "." in email:
-            return True
-        else:
-            return False
-    else:
-        return False
-
-
-def validate_age(age):
-    if age >= 18 and age <= 100:
-        return True
-    return False
-
-
-def generate_student_id():
-    return random.randint(1000, 9999)
-
-
-def calculate_percentage(marks, total=100):
-    if total == 0:
-        return 0
-    percentage = (marks / total) * 100
-    return percentage
-
-
-def process_user_expression(expression):
-    try:
-        result = eval(expression)
-        return result
-    except Exception as error:
-        print("Invalid expression", error)
-        return None
-
-
-def save_to_file(data, filename="students.json"):
-    try:
-        file = open(filename, "w")
-        json.dump(data, file)
-        file.close()
-        print("Data saved successfully")
-    except Exception as error:
-        print(error)
-
-
-def read_from_file(filename="students.json"):
-    try:
-        file = open(filename, "r")
-        data = json.load(file)
-        file.close()
-        return data
-    except:
-        return []
-
-
-# Report Generation
-def generate_report(students):
-    report = ""
-    total_marks = 0
-    student_count = 0
+    print("\nSTUDENT REPORT")
+    print("-" * 72)
+    print(f"{'ID':<6}{'NAME':<22}{'COURSE':<18}{'MARKS':>8}{'GRADE':>8}")
+    print("-" * 72)
 
     for student in students:
-        report += "Student Name: " + student["name"] + "\n"
-        report += "Course: " + student["course"] + "\n"
-        report += "Marks: " + str(student["marks"]) + "\n"
-        report += "Grade: " + calculate_grade(student["marks"]) + "\n"
-        report += "-----------------------\n"
+        grade = calculate_grade(student.marks)
+        print(
+            f"{student.student_id:<6}"
+            f"{student.name[:20]:<22}"
+            f"{student.course[:16]:<18}"
+            f"{student.marks:>8.1f}"
+            f"{grade:>8}"
+        )
 
-        total_marks += student["marks"]
-        student_count += 1
-
-    if student_count > 0:
-        average = total_marks / student_count
-        report += "Average Marks: " + str(average)
-
-    return report
+    average = sum(student.marks for student in students) / len(students)
+    print("-" * 72)
+    print(f"Class average: {average:.1f}")
 
 
-def process_student_data(students):
-    result = []
+def load_demo_data(repository: StudentRepository) -> None:
+    """Add sample students when the database is empty."""
+    if repository.list_all():
+        return
 
-    for student in students:
-        if student["marks"] > 90:
-            status = "Excellent"
-        elif student["marks"] > 75:
-            status = "Very Good"
-        elif student["marks"] > 60:
-            status = "Good"
-        elif student["marks"] > 40:
-            status = "Average"
-        else:
-            status = "Poor"
-
-        student["status"] = status
-        result.append(student)
-
-    return result
-
-
-# Main Application
-def main():
-
-    manager = StudentManager()
-    teacher_manager = TeacherManager()
-    auth = Authentication()
-
-    print("Welcome to", APP_NAME)
-    print("Version:", APP_VERSION)
-
-    auth.login("admin", "admin123")
-
-    manager.add_student(
-        "Rahul Sharma",
-        "rahul@gmail.com",
-        22,
-        "Python",
-        85
+    sample_students = (
+        ("Aarav Mehta", "aarav@example.com", "Python", 91.0),
+        ("Diya Sharma", "diya@example.com", "Cloud Computing", 84.5),
+        ("Kabir Verma", "kabir@example.com", "DevOps", 76.0),
     )
+    for details in sample_students:
+        try:
+            repository.add(*details)
+        except StudentValidationError:
+            LOGGER.info("Skipping an existing sample student.")
 
-    manager.add_student(
-        "Amit Kumar",
-        "amit@gmail.com",
-        23,
-        "DevOps",
-        92
+
+def main() -> None:
+    """Run the student management demonstration."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s: %(message)s",
     )
-
-    manager.add_student(
-        "Priya Singh",
-        "priya@gmail.com",
-        21,
-        "AWS",
-        78
-    )
-
-    teacher_manager.add_teacher(
-        "Mr. Sharma",
-        "sharma@gmail.com",
-        "Python"
-    )
-
-    teacher_manager.add_teacher(
-        "Mr. Verma",
-        "verma@gmail.com",
-        "DevOps"
-    )
-
-    manager.display_students()
-    teacher_manager.display_teachers()
-
-    average = manager.calculate_average_marks()
-    print("Average Marks:", average)
-
-    topper = manager.get_topper()
-
-    if topper:
-        print("Topper:", topper["name"])
-
-    report = generate_report(manager.students)
-    print(report)
-
-    processed_data = process_student_data(manager.students)
-
-    save_to_file(processed_data)
-
-    print("Application execution completed")
+    repository = StudentRepository()
+    load_demo_data(repository)
+    students = repository.list_all()
+    print(f"Welcome to the Student Management Demo ({len(students)} students)")
+    print_student_report(students)
 
 
 if __name__ == "__main__":
