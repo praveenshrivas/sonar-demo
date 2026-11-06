@@ -1,3 +1,4 @@
+
 """Unit tests for the student management application."""
 
 import pytest
