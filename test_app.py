@@ -1,3 +1,67 @@
+"""Unit tests for the student management application."""
+
+import pytest
+
+import app
+
+
+@pytest.fixture
+def repository(tmp_path):
+    """Provide a repository backed by a temporary database."""
+    return app.StudentRepository(tmp_path / "test_students.db")
+
+
+def test_add_and_get_student(repository):
+    student = repository.add(
+        "Aarav Mehta", "aarav@example.com", "Python", 91.0
+    )
+
+    saved_student = repository.get(student.student_id)
+
+    assert saved_student == student
+
+
+def test_list_students_returns_students_in_name_order(repository):
+    repository.add("Zoya Khan", "zoya@example.com", "AWS", 80)
+    repository.add("Aarav Mehta", "aarav@example.com", "Python", 91)
+
+    students = repository.list_all()
+
+    assert [student.name for student in students] == [
+        "Aarav Mehta",
+        "Zoya Khan",
+    ]
+
+
+def test_add_rejects_duplicate_email(repository):
+    repository.add("Aarav Mehta", "aarav@example.com", "Python", 91)
+
+    with pytest.raises(app.StudentValidationError):
+        repository.add("Another Student", "aarav@example.com", "AWS", 75)
+
+
+def test_get_unknown_student_raises_error(repository):
+    with pytest.raises(app.StudentNotFoundError):
+        repository.get(999)
+
+
+def test_update_marks(repository):
+    student = repository.add(
+        "Diya Sharma", "diya@example.com", "Cloud", 70
+    )
+
+    updated = repository.update_marks(student.student_id, 88.5)
+
+    assert updated.marks == 88.5
+
+
+def test_update_unknown_student_raises_error(repository):
+    with pytest.raises(app.StudentNotFoundError):
+        repository.update_marks(999, 75)
+
+
+def test_delete_student(repository):
+    student = repository.add(
         "Kabir Verma", "kabir@example.com", "DevOps", 76
     )
 
